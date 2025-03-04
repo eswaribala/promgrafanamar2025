@@ -18,7 +18,7 @@ spec:
         app: customerapp
     spec:
       containers:
-      - image: eswaribala/siemensmsnov2024:customerapp
+      - image: eswaribala/promgrafanamar2025:customerapp
         name: v1
         resources: {}
         env:
