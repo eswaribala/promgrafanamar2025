@@ -38,9 +38,9 @@ metadata:
 spec:
   ports:
   - name: 7074-7074
-    port: 7074
+    port: 7076
     protocol: TCP
-    targetPort: 7074
+    targetPort: 7076
   selector:
     app: customerapp
   type: ClusterIP
