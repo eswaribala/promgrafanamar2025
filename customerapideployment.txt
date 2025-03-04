@@ -21,5 +21,9 @@ kubectl get svc
 #do port forward
 kubectl port-forward svc/customerservice 7074:7074
 
+or
+
+kubectl expose deployment --port 7074 customerapp --type=LoadBalancer --name=customerservicev1
+
 #go to browser
 http://localhost:7074/swagger-ui.html
