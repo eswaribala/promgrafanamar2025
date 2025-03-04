@@ -27,3 +27,7 @@ kubectl expose deployment --port 7076 customerapp --type=LoadBalancer --name=cus
 
 #go to browser
 http://localhost:7074/swagger-ui.html
+
+#expose postgres service
+kubectl expose deployment --port 5432 postgres --type=LoadBalancer --name=postgresservice
+
