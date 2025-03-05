@@ -2,3 +2,5 @@
 #create postgres exporter folder
 #cd to postgres exporter folder
 2.helm show values prometheus-community/prometheus-postgres-exporter > values.yaml
+#after updating db configuration
+helm upgrade postgres-exporter prometheus-community/prometheus-postgres-exporter -f values.yaml
