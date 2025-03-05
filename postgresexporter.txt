@@ -1,2 +1,2 @@
 1. helm install postgres-exporter prometheus-community/prometheus-postgres-exporter
-2.
+2.helm show values prometheus-community/prometheus-postgres-exporter > values.yaml
