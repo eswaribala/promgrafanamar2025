@@ -1,3 +1,4 @@
 1. helm install postgres-exporter prometheus-community/prometheus-postgres-exporter
 #create postgres exporter folder
+#cd to postgres exporter folder
 2.helm show values prometheus-community/prometheus-postgres-exporter > values.yaml
