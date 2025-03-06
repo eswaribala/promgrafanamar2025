@@ -1306,8 +1306,8 @@ alertmanager:
 
       - name: 'slack-notifications'
         slack_configs:
-            - api_url: 'https://hooks.slack.com/services/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'
-              channel: '#promalertmar2025'
+            - api_url: ''
+              channel: ''
               send_resolved: true
               title: "{{ .CommonLabels.alertname }} - {{ .Status }}"
               text: |
