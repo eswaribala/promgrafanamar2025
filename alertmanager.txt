@@ -6,7 +6,7 @@ config:
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 1h
-      #receiver: 'slack-notifications'   # default receiver
+      receiver: 'slack-notifications'   # default receiver
       routes:
         # Custom route for alerts with severity = critical
         - match:
