@@ -3,4 +3,11 @@ kubectl apply -f service-python.yaml
 kubectl get pods
 kubectl expose deployment --port 9877 python-deployment  --type=LoadBalancer --name=pythonservicev1
 
-  
+ #modify prometheus values.yaml 
+- job_name: 'pythonexporter'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['host.docker.internal:9877']
+
+#helm upgrade
+helm upgrade prometheus prometheus-community/prometheus -f values.yaml -n prometheus
