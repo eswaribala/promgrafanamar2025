@@ -227,3 +227,9 @@ kubectl port-forward -n prometheus svc/statsd-exporter-prometheus-statsd-exporte
           - targets: ['host.docker.internal:9102']
 #update helm
 helm upgrade prometheus prometheus-community/prometheus -f values.yaml -n prometheus
+
+#manual scale
+kubectl scale --replicas=2 deployment prometheus-server -n prometheus
+
+
+
