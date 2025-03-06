@@ -1,0 +1,6 @@
+kubectl apply -f deployment-python.yaml
+kubectl apply -f service-python.yaml
+kubectl get pods
+kubectl expose deployment --port 9877 python-deployment  --type=LoadBalancer --name=pythonservicev1
+
+  
