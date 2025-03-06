@@ -1,0 +1,35 @@
+config:
+   global:
+     resolve_timeout: 5m
+   route:
+      group_by: ['alertname']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'slack-notifications'   # default receiver
+      
+   receivers:
+      - name: 'email-alerts'
+        email_configs:
+          - to: 'alerts@example.com'
+            from: 'alertmanager@example.com'
+            smarthost: 'smtp.example.com:587'
+            auth_username: 'smtp-user'
+            auth_password: 'smtp-password'
+      - name: 'web-hook'
+        webhook_configs:
+            - url: 'http://host.docker.internal:4000/webhook'
+
+      - name: 'slack-notifications'
+        slack_configs:
+            - api_url: ''
+              channel: ''
+              send_resolved: true
+              title: "{{ .CommonLabels.alertname }} - {{ .Status }}"
+              text: |
+               {{ range .Alerts }}
+                 *Alert:* {{ .Annotations.summary }}
+                 *Description:* {{ .Annotations.description }}
+                 *Severity:* {{ .Labels.severity }}
+                 *Source:* {{ .GeneratorURL }}
+               {{ end }}  
