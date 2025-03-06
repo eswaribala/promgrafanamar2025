@@ -231,6 +231,14 @@ helm upgrade prometheus prometheus-community/prometheus -f values.yaml -n promet
 #manual scale
 kubectl scale --replicas=2 deployment prometheus-server -n prometheus
 
+#autoscale
+kubectl autoscale deployment prometheus-server -n prometheus --min=1 --max=4 --cpu-percent=20
+#checking autoscale
+kubectl get hpa -n prometheus
+#delete autoscale
+kubectl delete hpa prometheus-server -n prometheus
+
+
 #scaling the pod
 kubectl run prometheus-alertmanager-1 --image=quay.io/prometheus/alertmanager:v0.28.0 -n prometheus
 
