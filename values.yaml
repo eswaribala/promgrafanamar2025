@@ -777,6 +777,24 @@ serverFiles:
            annotations:
              description: '{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 5 minutes.'
              summary: 'Instance {{ $labels.instance }} down'
+         - alert: JobRequestRateSum
+           expr: sum(rate(http_server_requests_seconds_sum{outcome="REDIRECTION"}[24h])) by (outcome)
+           for: 2m
+           labels:
+             severity: critical
+           annotations:
+             summary: "Job Request {{ $labels.instance }} is not running"
+             description: "Job Request {{ $labels.instance }} has been down for the last 2 minutes."
+         - alert: HighProcessCPUUsage
+           expr: rate(process_cpu_usage[5m]) * 100 > 0.0001
+           for: 1m
+           labels:
+             severity: warning
+           annotations:
+             summary: "Job Request {{ $labels.instance }} is using high cpu"
+             description: "Job Request {{ $labels.instance }} is using high cpu for the last 1 minute."
+
+
   ## DEPRECATED DEFAULT VALUE, unless explicitly naming your files, please use alerting_rules.yml
   alerts: {}
 
@@ -1291,7 +1309,30 @@ alertmanager:
       group_interval: 5m
       repeat_interval: 1h
       receiver: 'slack-notifications'   # default receiver
-      
+      routes:
+        # Custom route for alerts with severity = critical
+        - match:
+            severity: critical
+          receiver: 'web-hook'
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 30m
+        
+        # Custom route for alerts from specific namespaces
+        - match:
+            severity: 'page'
+          receiver: 'slack-notifications'
+          group_wait: 1m
+          group_interval: 10m
+          repeat_interval: 1h
+        # Custom route for alerts from specific namespaces
+        - match:
+            severity: 'warning'
+          receiver: 'pager-duty-notifications'
+          group_wait: 1m
+          group_interval: 10m
+          repeat_interval: 1h
+
    receivers:
       - name: 'email-alerts'
         email_configs:
@@ -1306,8 +1347,8 @@ alertmanager:
 
       - name: 'slack-notifications'
         slack_configs:
-            - api_url: ''
-              channel: ''
+            - api_url: 'https://hooks.slack.com/services/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'
+              channel: '#promalertmar2025'
               send_resolved: true
               title: "{{ .CommonLabels.alertname }} - {{ .Status }}"
               text: |
@@ -1317,6 +1358,10 @@ alertmanager:
                  *Severity:* {{ .Labels.severity }}
                  *Source:* {{ .GeneratorURL }}
                {{ end }}  
+      - name: 'pager-duty-notifications'
+        pagerduty_configs:
+        - service_key: '99b9632c58f94704c041aef6a0de03bc'  
+         
   persistence:
     size: 2Gi
 
