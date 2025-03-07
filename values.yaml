@@ -60,7 +60,7 @@ configmapReload:
     ##
     image:
       repository: quay.io/prometheus-operator/prometheus-config-reloader
-      tag: v0.80.1
+      tag: v0.76.0
       # When digest is set to a non-empty value, images will be pulled by digest (regardless of tag value).
       digest: ""
       pullPolicy: IfNotPresent
@@ -287,13 +287,6 @@ server:
   tsdb: {}
     # out_of_order_time_window: 0s
 
-  ## https://prometheus.io/docs/guides/opentelemetry
-  ##
-  otlp: {}
-    # promote_resource_attributes: []
-    # keep_identifying_resource_attributes: false
-    # translation_strategy: NoUTF8EscapingWithSuffixes
-
   ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#exemplars
   ## Must be enabled via --enable-feature=exemplar-storage
   ##
@@ -354,7 +347,7 @@ server:
   ## Defining configMapOverrideName will cause templates/server-configmap.yaml
   ## to NOT generate a ConfigMap resource
   ##
-  configMapOverrideName: ""
+  #configMapOverrideName: ""
 
   ## Extra labels for Prometheus server ConfigMap (ConfigMap that holds serverFiles)
   extraConfigmapLabels: {}
@@ -384,7 +377,7 @@ server:
     ## Redirect ingress to an additional defined port on the service
     # servicePort: 8081
 
-    ## Prometheus server Ingress hostnames with optional path (passed through tpl)
+    ## Prometheus server Ingress hostnames with optional path
     ## Must be provided if Ingress is enabled
     ##
     hosts: []
@@ -396,14 +389,14 @@ server:
     # pathType is only for k8s >= 1.18
     pathType: Prefix
 
-    ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services. (passed through tpl)
+    ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
     extraPaths: []
     # - path: /*
     #   backend:
     #     serviceName: ssl-redirect
     #     servicePort: use-annotation
 
-    ## Prometheus server Ingress TLS configuration (hosts passed through tpl)
+    ## Prometheus server Ingress TLS configuration
     ## Secrets must be manually created in the namespace
     ##
     tls: []
@@ -460,7 +453,7 @@ server:
   ##
   podDisruptionBudget:
     enabled: false
-    # maxUnavailable: 1
+    maxUnavailable: 1
     # minAvailable: 1
     ## unhealthyPodEvictionPolicy is available since 1.27.0 (beta)
     ## https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
@@ -519,6 +512,13 @@ server:
     ##
     # storageClass: "-"
 
+    ## Prometheus server data Persistent Volume Binding Mode
+    ## If defined, volumeBindingMode: <volumeBindingMode>
+    ## If undefined (the default) or set to null, no volumeBindingMode spec is
+    ##   set, choosing the default mode.
+    ##
+    # volumeBindingMode: ""
+
     ## Subdirectory of Prometheus server data Persistent Volume to mount
     ## Useful if the volume's root directory is not empty
     ##
@@ -556,7 +556,6 @@ server:
   ## Prometheus AlertManager configuration
   ##
   alertmanagers: []
-
   ## Specify if a Pod Security Policy for node-exporter must be created
   ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/
   ##
@@ -702,6 +701,8 @@ server:
     ## If false, no Service will be created for the Prometheus server
     ##
     enabled: true
+    type: NodePort
+    port: 9091   
 
     annotations: {}
     labels: {}
@@ -717,8 +718,6 @@ server:
     servicePort: 80
     sessionAffinity: None
     type: ClusterIP
-    ## externalTrafficPolicy is applicable to service with externally-facing addresses (NodePorts, ExternalIPs, and LoadBalancer IPs)
-    externalTrafficPolicy: ""
 
     ## Enable gRPC port on service to allow auto discovery with thanos-querier
     gRPC:
@@ -765,7 +764,7 @@ scrapeConfigFiles: []
 serverFiles:
   ## Alerts configuration
   ## Ref: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
-  alerting_rules.yml: 
+  alerting_rules.yml:
    groups:
      - name: Instances
        rules:
@@ -775,29 +774,80 @@ serverFiles:
            labels:
              severity: page
            annotations:
-             description: '{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 5 minutes.'
+             description: '{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute.'
              summary: 'Instance {{ $labels.instance }} down'
+         - alert: HighCPUUsage
+           expr: 100 * (1 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 90
+           for: 5m
+           labels:
+             severity: warning
+           annotations:
+             summary: "Instance {{ $labels.instance }} CPU usage is high"
+             description: "CPU usage on instance {{ $labels.instance }} has been above 90% for the last 5 minutes."
+         - alert: LowAvailableMemory
+           expr: node_memory_MemAvailable_bytes{job="node_exporter"} / node_memory_MemTotal_bytes{job="node_exporter"} * 100 >50
+           for: 2m
+           labels:
+             severity: critical
+           annotations:
+             summary: "Low memory available on {{ $labels.instance }}"
+             description: "Available memory on instance {{ $labels.instance }} is below 10% for more than 10 minutes."
+         - alert: HighDiskUsage
+           expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+           for: 15m
+           labels:
+             severity: warning
+           annotations:
+             summary: "High disk usage on {{ $labels.instance }}"
+             description: "Disk usage is above 85% on instance {{ $labels.instance }} for more than 15 minutes."
+         - alert: ConfluentKafkaRequestBytes
+           expr: avg(confluent_kafka_server_request_bytes) > 10
+           for: 1m
+           labels:
+             severity: warning
+           annotations:
+             summary: "ConfluentKafkaRequestBytes increase above 10 {{ $labels.instance }}"
+             description: "ConfluentKafkaRequestBytes increase above 10 {{ $labels.instance }} for more than 1 minutes."
+
+
+         - alert: NodeDown
+           expr: up == 0
+           for: 12h
+           labels:
+             severity: critical
+           annotations:
+             summary: "Node {{ $labels.instance }} is down"
+             description: "Node {{ $labels.instance }} has been down for the last 5 minutes."
+         - alert: HighLoadAverage
+           expr: node_load1 > 1.5 * count(node_cpu_seconds_total{mode="system"})
+           for: 5m
+           labels:
+             severity: warning
+           annotations:
+             summary: "High load average on {{ $labels.instance }}"
+             description: "Load average is higher than 1.5 times the number of CPU cores on instance {{ $labels.instance }}." 
          - alert: JobRequestRateSum
-           expr: sum(rate(http_server_requests_seconds_sum{outcome="REDIRECTION"}[24h])) by (outcome)
+           expr: sum(rate(http_server_requests_seconds_sum[24h])) by (outcome)
            for: 2m
            labels:
              severity: critical
            annotations:
              summary: "Job Request {{ $labels.instance }} is not running"
              description: "Job Request {{ $labels.instance }} has been down for the last 2 minutes."
-         - alert: HighProcessCPUUsage
-           expr: rate(process_cpu_usage[5m]) * 100 > 0.0001
-           for: 1m
+         #aggregated alerting rules
+         - alert: JobRequestRateSum
+           expr: sum(rate(http_server_requests_seconds_sum[24h])) by (outcome)
+           for: 2m
            labels:
-             severity: warning
+             severity: critical
            annotations:
-             summary: "Job Request {{ $labels.instance }} is using high cpu"
-             description: "Job Request {{ $labels.instance }} is using high cpu for the last 1 minute."
-
+             summary: "Job Request {{ $labels.instance }} is not running"
+             description: "Job Request {{ $labels.instance }} has been down for the last 2 minutes." 
+             
 
   ## DEPRECATED DEFAULT VALUE, unless explicitly naming your files, please use alerting_rules.yml
   alerts: {}
-
+  
   ## Records configuration
   ## Ref: https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/
   recording_rules.yml: {}
@@ -811,7 +861,11 @@ serverFiles:
     ## Below two files are DEPRECATED will be removed from this default values file
       - /etc/config/rules
       - /etc/config/alerts
-
+    #alerting:
+      #alertmanagers:
+      #- static_configs:
+        #- targets:
+          #- prometheus-alertmanager:9093
     scrape_configs:
       - job_name: prometheus
         static_configs:
@@ -820,25 +874,65 @@ serverFiles:
       - job_name: 'customer-app'
         metrics_path: '/actuator/prometheus'
         static_configs:
-          - targets: ['host.docker.internal:7076']  
+          - targets: ['host.docker.internal:7074']
       - job_name: 'pushgateway'
         static_configs:
           - targets: ['prometheus-prometheus-pushgateway.prometheus.svc:9091']
-      - job_name: 'windowsexporter'
-        metrics_path: '/metrics'
-        static_configs:
-          - targets: ['192.168.0.102:9182']
       - job_name: 'node_exporter'
         static_configs:
           - targets: ['prometheus-prometheus-node-exporter:9100']
-      - job_name: 'postgres_exporter'
+      - job_name: 'alertmanagers'
         static_configs:
-          - targets: ['host.docker.internal:9187']
-      - job_name: 'pythonexporter'
+          - targets: ['prometheus-alertmanager:9093']
+      - job_name: 'windowsexporter'
         metrics_path: '/metrics'
         static_configs:
+          - targets: ['192.168.0.106:9182']
+      - job_name: 'pythonmetricexporter'
+        static_configs:
           - targets: ['host.docker.internal:9877']
+      
+      - job_name: 'statsdexporter'
+        metrics_path: '/metrics'
+        static_configs:
+          - targets: ['host.docker.internal:9102']
 
+      - job_name: 'global-view'
+        scrape_interval: 15s
+        honor_labels: true
+        metrics_path: '/federate'
+        params:
+         'match[]':
+           - '{__name__=~".+"}'  # Match all metrics, adjust as necessary
+        static_configs:
+          - targets: ['host.docker.internal:8090','host.docker.internal:7090']
+      
+      - job_name: Confluent Cloud
+        scrape_interval: 1m
+        scrape_timeout: 1m
+        honor_timestamps: true
+        static_configs:
+          - targets:
+            - api.telemetry.confluent.cloud
+        scheme: https
+        basic_auth:
+          username: FKFC2ICU5JIYYGJF
+          password: i+lwFQRsh/3VpC/9XJ6t7fffPFBgEpbUrzxXvIZNt0hhsTkMyxI39vs6oUHmzEyy
+        metrics_path: /v2/metrics/cloud/export
+        params:
+          "resource.kafka.id":
+            - lkc-61dgz6
+          "resource.schema_registry.id":
+            - lsrc-3m270m
+          "resource.ksql.id":
+            - lksqlc-xv6y8k
+          "resource.compute_pool.id":
+            - lfcp-z9q6nz
+          "resource.connector.id":
+            - lcc-n95yqk
+            - lcc-ojz1pp
+            - lcc-xv6jox
+                    	            
       # A scrape configuration for running Prometheus on a Kubernetes cluster.
       # This uses separate scrape configs for cluster components (i.e. API server, node)
       # and services to allow each to use different authentication configs.
@@ -876,7 +970,7 @@ serverFiles:
           # so this should only be disabled in a controlled environment. You can
           # disable certificate verification by uncommenting the line below.
           #
-          # insecure_skip_verify: true
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
         # Keep only the default/kubernetes service endpoints for the https port. This
@@ -907,7 +1001,7 @@ serverFiles:
           # so this should only be disabled in a controlled environment. You can
           # disable certificate verification by uncommenting the line below.
           #
-          # insecure_skip_verify: true
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
         kubernetes_sd_configs:
@@ -944,7 +1038,7 @@ serverFiles:
           # so this should only be disabled in a controlled environment. You can
           # disable certificate verification by uncommenting the line below.
           #
-          # insecure_skip_verify: true
+          insecure_skip_verify: true
         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
         kubernetes_sd_configs:
@@ -1309,30 +1403,7 @@ alertmanager:
       group_interval: 5m
       repeat_interval: 1h
       receiver: 'slack-notifications'   # default receiver
-      routes:
-        # Custom route for alerts with severity = critical
-        - match:
-            severity: critical
-          receiver: 'web-hook'
-          group_wait: 10s
-          group_interval: 1m
-          repeat_interval: 30m
-        
-        # Custom route for alerts from specific namespaces
-        - match:
-            severity: 'page'
-          receiver: 'slack-notifications'
-          group_wait: 1m
-          group_interval: 10m
-          repeat_interval: 1h
-        # Custom route for alerts from specific namespaces
-        - match:
-            severity: 'warning'
-          receiver: 'pager-duty-notifications'
-          group_wait: 1m
-          group_interval: 10m
-          repeat_interval: 1h
-
+      
    receivers:
       - name: 'email-alerts'
         email_configs:
@@ -1347,8 +1418,8 @@ alertmanager:
 
       - name: 'slack-notifications'
         slack_configs:
-            - api_url: 'https://hooks.slack.com/services/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'
-              channel: '#promalertmar2025'
+            - api_url: 'https://hooks.slack.com/services/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'
+              channel: '#alertchannel'
               send_resolved: true
               title: "{{ .CommonLabels.alertname }} - {{ .Status }}"
               text: |
@@ -1358,10 +1429,13 @@ alertmanager:
                  *Severity:* {{ .Labels.severity }}
                  *Source:* {{ .GeneratorURL }}
                {{ end }}  
-      - name: 'pager-duty-notifications'
-        pagerduty_configs:
-        - service_key: '99b9632c58f94704c041aef6a0de03bc'  
-         
+  
+            
+
+  alertmanagerSpec:
+    replicas: 1  # Number of Alertmanager replicas
+    externalUrl: ""
+
   persistence:
     size: 2Gi
 
@@ -1370,6 +1444,30 @@ alertmanager:
     runAsNonRoot: true
     runAsGroup: 65534
     fsGroup: 65534
+alertmanagerFiles:
+  alertmanager.yml: |
+    alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'web-hook'   # default receiver
+    receivers:
+      - name: 'email-alerts'
+        email_configs:
+          - to: 'alerts@example.com'
+            from: 'alertmanager@example.com'
+            smarthost: 'smtp.example.com:587'
+            auth_username: 'smtp-user'
+            auth_password: 'smtp-password'
+      - name: 'web-hook'
+        webhook_configs:
+            - url: 'http://host.docker.internal:4000/webhook'
+            
 
 ## kube-state-metrics sub-chart configurable values
 ## Please see https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics
@@ -1404,4 +1502,12 @@ prometheus-pushgateway:
   # Optional service annotations
   serviceAnnotations:
     prometheus.io/probe: pushgateway
-
+nginx:
+ status: 
+  enabled: true
+  port: 9113
+metrics:
+ enabled: true
+ path: /metrics
+ port: 9113
+ 
